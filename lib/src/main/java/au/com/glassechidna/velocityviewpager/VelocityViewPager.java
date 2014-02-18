@@ -36,7 +36,6 @@ import android.support.v4.view.accessibility.AccessibilityEventCompat;
 import android.support.v4.view.accessibility.AccessibilityNodeInfoCompat;
 import android.support.v4.view.accessibility.AccessibilityRecordCompat;
 import android.support.v4.widget.EdgeEffectCompat;
-import android.support.v4.widget.ScrollerCompat;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.FocusFinder;
@@ -53,7 +52,6 @@ import android.view.accessibility.AccessibilityEvent;
 import android.view.animation.AnimationUtils;
 import android.view.animation.Interpolator;
 import android.widget.OverScroller;
-import android.widget.Scroller;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -115,6 +113,10 @@ public class VelocityViewPager extends ViewGroup {
             return t * t * t * t * t + 1.0f;
         }
     };
+
+    private static final int FLINGING_STOPPED = 0;
+    private static final int FLINGING_LEFT = 1;
+    private static final int FLINGING_RIGHT = 2;
 
     private final ArrayList<ItemInfo> mItems = new ArrayList<ItemInfo>();
     private final ItemInfo mTempItem = new ItemInfo();
@@ -183,7 +185,7 @@ public class VelocityViewPager extends ViewGroup {
     private int mCloseEnough;
     private long mScrollStartTime;
     private int mScrollDuration;
-    private boolean mFlinging;
+    private int mFlinging;
 
     // If the pager is at least this close to its final position, complete the scroll
     // on touch down and let the user interact with the content inside instead of
@@ -1617,35 +1619,90 @@ public class VelocityViewPager extends ViewGroup {
     }
 
     private int constrainScroll(int x) {
-        if (mFlinging) {
-            int width = getClientWidth();
+        int width = getClientWidth();
 
-            int firstOffset = (int) (mFirstOffset * width);
-            if (x < firstOffset) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.ICE_CREAM_SANDWICH) {
-                    if (mLeftEdge.isFinished()) {
-                        mLeftEdge.onAbsorb((int) Math.abs(mScroller.getCurrVelocity()));
-                    }
+        int firstOffset = (int) (mFirstOffset * width);
+        if (x < firstOffset) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.ICE_CREAM_SANDWICH) {
+                if (mLeftEdge.isFinished()) {
+                    mLeftEdge.onAbsorb((int) Math.abs(mScroller.getCurrVelocity()));
                 }
-
-                mFlinging = false;
-                mScroller.startScroll(firstOffset, 0, 0, 0);
-                mScroller.abortAnimation();
-                return firstOffset;
             }
 
-            int lastOffset = (int) (mLastOffset * width);
-            if (x > lastOffset) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.ICE_CREAM_SANDWICH) {
-                    if (mRightEdge.isFinished()) {
-                        mRightEdge.onAbsorb((int) Math.abs(mScroller.getCurrVelocity()));
-                    }
+            mFlinging = FLINGING_STOPPED;
+            mScroller.startScroll(firstOffset, 0, 0, 0);
+            mScroller.abortAnimation();
+            return firstOffset;
+        }
+
+        int lastOffset = (int) (mLastOffset * width);
+        if (x > lastOffset) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.ICE_CREAM_SANDWICH) {
+                if (mRightEdge.isFinished()) {
+                    mRightEdge.onAbsorb((int) Math.abs(mScroller.getCurrVelocity()));
+                }
+            }
+
+            mFlinging = FLINGING_STOPPED;
+            mScroller.startScroll(lastOffset, 0, 0, 0);
+            mScroller.abortAnimation();
+            return lastOffset;
+        }
+
+
+        if (mFlinging != FLINGING_STOPPED) {
+            int finalX = mScroller.getFinalX();
+            ItemInfo snapItemInfo = infoForScrollPosition(finalX);
+            int snapItemWidth = (int) (snapItemInfo.widthFactor * width);
+            int snapItemOffset = (int) (snapItemInfo.offset * width);
+
+            // infoForScrollPosition() returns the closest item. However, we can only snap when we
+            // have the ItemInfo that finalX is inside of.
+            if (finalX > snapItemOffset && finalX < snapItemOffset + snapItemWidth) {
+                // If finalX was in the right half of the snap item, then we want to snap to the
+                // next item along.
+                if (finalX - snapItemOffset > snapItemWidth / 2) {
+                    snapItemOffset += snapItemWidth;
                 }
 
-                mFlinging = false;
-                mScroller.startScroll(lastOffset, 0, 0, 0);
-                mScroller.abortAnimation();
-                return lastOffset;
+                if (mFlinging == FLINGING_RIGHT) {
+                    if (finalX > snapItemOffset) {
+                        // Overscroll
+                        if (x > snapItemOffset) {
+                            mFlinging = FLINGING_STOPPED;
+                            int overscroll = finalX - snapItemOffset;
+                            mScroller.notifyHorizontalEdgeReached(x, snapItemOffset, overscroll);
+                        }
+                    } else {
+                        // Underscroll
+                        if (x > snapItemOffset - snapItemWidth) {
+                            mFlinging = FLINGING_STOPPED;
+                            int overscroll = snapItemOffset - x;
+                            mScroller.notifyHorizontalEdgeReached(x, snapItemOffset, overscroll);
+                            /*mScroller.forceFinished(true);
+                            mScroller.fling(x, 0, (int) mScroller.getCurrVelocity(), 0, snapItemOffset, snapItemOffset, 0, 0);*/
+                        }
+                    }
+                } else if (mFlinging == FLINGING_LEFT) {
+                    // Overscroll
+                    if (finalX < snapItemOffset) {
+                        if (x < snapItemOffset) {
+                            mFlinging = FLINGING_STOPPED;
+                            int overscroll = snapItemOffset - finalX;
+                            mScroller.notifyHorizontalEdgeReached(x, snapItemOffset, overscroll);
+                        }
+                    } else {
+                        // Underscroll
+                        if (x < snapItemOffset + snapItemWidth) {
+                            mFlinging = FLINGING_STOPPED;
+                            int overscroll = x - snapItemOffset;
+                            mScroller.notifyHorizontalEdgeReached(x, snapItemOffset, overscroll);
+                            /*mScroller.forceFinished(true);
+                            mScroller.fling(x, 0, (int) -mScroller.getCurrVelocity(), 0, snapItemOffset, snapItemOffset, 0, 0);*/
+                        }
+                    }
+
+                }
             }
         }
 
@@ -1677,6 +1734,7 @@ public class VelocityViewPager extends ViewGroup {
             ViewCompat.postInvalidateOnAnimation(this);
             return;
         }
+
         // Done with scroll, clean up state.
         completeScroll(true);
     }
@@ -2242,7 +2300,7 @@ public class VelocityViewPager extends ViewGroup {
         final int sy = getScrollY();
 
         mScroller.fling(sx, sy, -velocity, 0, Integer.MIN_VALUE, Integer.MAX_VALUE, sy, sy);
-        mFlinging = true;
+        mFlinging = (velocity > 0) ? FLINGING_LEFT : FLINGING_RIGHT;
     }
 
     @Override
