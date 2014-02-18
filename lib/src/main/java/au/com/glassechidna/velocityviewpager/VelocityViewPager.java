@@ -50,7 +50,9 @@ import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.view.accessibility.AccessibilityEvent;
+import android.view.animation.AnimationUtils;
 import android.view.animation.Interpolator;
+import android.widget.OverScroller;
 import android.widget.Scroller;
 
 import java.lang.reflect.Method;
@@ -124,7 +126,7 @@ public class VelocityViewPager extends ViewGroup {
     private int mRestoredCurItem = -1;
     private Parcelable mRestoredAdapterState = null;
     private ClassLoader mRestoredClassLoader = null;
-    private Scroller mScroller;
+    private OverScroller mScroller;
     private PagerObserver mObserver;
 
     private int mPageMargin;
@@ -179,6 +181,9 @@ public class VelocityViewPager extends ViewGroup {
     private int mMaximumVelocity;
     private int mFlingDistance;
     private int mCloseEnough;
+    private long mScrollStartTime;
+    private int mScrollDuration;
+    private boolean mFlinging;
 
     // If the pager is at least this close to its final position, complete the scroll
     // on touch down and let the user interact with the content inside instead of
@@ -358,7 +363,7 @@ public class VelocityViewPager extends ViewGroup {
         setDescendantFocusability(FOCUS_AFTER_DESCENDANTS);
         setFocusable(true);
         final Context context = getContext();
-        mScroller = new Scroller(context, sInterpolator);
+        mScroller = new OverScroller(context, sInterpolator);
         final ViewConfiguration configuration = ViewConfiguration.get(context);
         final float density = context.getResources().getDisplayMetrics().density;
 
@@ -825,6 +830,8 @@ public class VelocityViewPager extends ViewGroup {
         }
         duration = Math.min(duration, MAX_SETTLE_DURATION);
 
+        mScrollStartTime = AnimationUtils.currentAnimationTimeMillis();
+        mScrollDuration = duration;
         mScroller.startScroll(sx, sy, dx, dy, duration);
         ViewCompat.postInvalidateOnAnimation(this);
     }
@@ -1467,6 +1474,7 @@ public class VelocityViewPager extends ViewGroup {
         }
     }
 
+    // TODO: This is incorrect for flings...
     private void recomputeScrollPosition(int width, int oldWidth, int margin, int oldMargin) {
         if (oldWidth > 0 && !mItems.isEmpty()) {
             final int widthWithMargin = width - getPaddingLeft() - getPaddingRight() + margin;
@@ -1479,8 +1487,11 @@ public class VelocityViewPager extends ViewGroup {
             scrollTo(newOffsetPixels, getScrollY());
             if (!mScroller.isFinished()) {
                 // We now return to your regularly scheduled scroll, already in progress.
-                final int newDuration = mScroller.getDuration() - mScroller.timePassed();
+                final int newDuration = Math.max(0, (int) (mScrollDuration - AnimationUtils.currentAnimationTimeMillis() - mScrollStartTime));
                 ItemInfo targetInfo = infoForPosition(mCurItem);
+
+                mScrollStartTime = AnimationUtils.currentAnimationTimeMillis();
+                mScrollDuration = newDuration;
                 mScroller.startScroll(newOffsetPixels, 0,
                         (int) (targetInfo.offset * width), 0, newDuration);
             }
@@ -1606,32 +1617,36 @@ public class VelocityViewPager extends ViewGroup {
     }
 
     private int constrainScroll(int x) {
-        int width = getClientWidth();
+        if (mFlinging) {
+            int width = getClientWidth();
 
-        int firstOffset = (int) (mFirstOffset * width);
-        if (x < firstOffset) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.ICE_CREAM_SANDWICH) {
-                if (mLeftEdge.isFinished()) {
-                    mLeftEdge.onAbsorb((int) Math.abs(mScroller.getCurrVelocity()));
+            int firstOffset = (int) (mFirstOffset * width);
+            if (x < firstOffset) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.ICE_CREAM_SANDWICH) {
+                    if (mLeftEdge.isFinished()) {
+                        mLeftEdge.onAbsorb((int) Math.abs(mScroller.getCurrVelocity()));
+                    }
                 }
+
+                mFlinging = false;
+                mScroller.startScroll(firstOffset, 0, 0, 0);
+                mScroller.abortAnimation();
+                return firstOffset;
             }
 
-            mScroller.setFinalX(firstOffset);
-            mScroller.abortAnimation();
-            return firstOffset;
-        }
-
-        int lastOffset = (int) (mLastOffset * width);
-        if (x > lastOffset) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.ICE_CREAM_SANDWICH) {
-                if (mRightEdge.isFinished()) {
-                    mRightEdge.onAbsorb((int) Math.abs(mScroller.getCurrVelocity()));
+            int lastOffset = (int) (mLastOffset * width);
+            if (x > lastOffset) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.ICE_CREAM_SANDWICH) {
+                    if (mRightEdge.isFinished()) {
+                        mRightEdge.onAbsorb((int) Math.abs(mScroller.getCurrVelocity()));
+                    }
                 }
-            }
 
-            mScroller.setFinalX(lastOffset);
-            mScroller.abortAnimation();
-            return lastOffset;
+                mFlinging = false;
+                mScroller.startScroll(lastOffset, 0, 0, 0);
+                mScroller.abortAnimation();
+                return lastOffset;
+            }
         }
 
         return x;
@@ -2227,6 +2242,7 @@ public class VelocityViewPager extends ViewGroup {
         final int sy = getScrollY();
 
         mScroller.fling(sx, sy, -velocity, 0, Integer.MIN_VALUE, Integer.MAX_VALUE, sy, sy);
+        mFlinging = true;
     }
 
     @Override
