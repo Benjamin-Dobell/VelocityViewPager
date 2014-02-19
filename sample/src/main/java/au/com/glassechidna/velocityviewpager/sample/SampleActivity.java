@@ -1,5 +1,6 @@
 package au.com.glassechidna.velocityviewpager.sample;
 
+import java.util.Comparator;
 import java.util.Locale;
 import java.util.Random;
 
@@ -44,16 +45,16 @@ public class SampleActivity extends ActionBarActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_sample);
 
-
-
         // Create the adapter that will return a fragment for each of the three
         // primary sections of the activity.
         mSectionsPagerAdapter = new SectionsPagerAdapter(getSupportFragmentManager());
 
         // Set up the ViewPager with the sections adapter.
         mViewPager = (VelocityViewPager) findViewById(R.id.pager);
-        mViewPager.setOffscreenPageLimit(2);
+        mViewPager.setOffscreenPageLimit(4);
         mViewPager.setAdapter(mSectionsPagerAdapter);
+        mViewPager.setPageTransformer(false, new PageTransformer());
+        mViewPager.setDrawOrderComparator(new ViewComparator());
     }
 
 
@@ -109,7 +110,56 @@ public class SampleActivity extends ActionBarActivity {
 
         @Override
         public float getPageWidth(int position) {
-            return 0.5f;
+            return 0.2f;
+        }
+    }
+
+    public class PageTransformer implements VelocityViewPager.PageTransformer {
+
+        private static final float MIN_SCALE = 0.55f;
+        private static final float MAX_SCALE = 1.0f;
+        private static final float MIN_ALPHA = 0.2f;
+        private static final float MAX_ALPHA = 1.0f;
+
+        public void transformPage(View view, float position) {
+            int pageWidth = view.getWidth();
+
+            position -= 2.0f * 0.2f;
+
+            if (position < -1.0f) {
+                view.setAlpha(0.0f);
+            } else if (position <= 1.0f) {
+                float factor = Math.abs(position);
+                factor *= factor;
+                float factorComplement = 1.0f - factor;
+
+                float scale =  factorComplement * (MAX_SCALE - MIN_SCALE) + MIN_SCALE;
+                view.setScaleX(scale);
+                view.setScaleY(scale);
+
+                float alpha = factorComplement * (MAX_ALPHA - MIN_ALPHA) + MIN_ALPHA;
+                view.setAlpha(alpha);
+
+                float translationFactor = 0.5f * (float) Math.sin(Math.PI * position - 0.5f * Math.PI) + 0.5f;
+                translationFactor *= translationFactor;
+                float translationX = -Math.signum(position) * 2.0f * pageWidth * translationFactor;
+                view.setTranslationX(translationX);
+            } else {
+                view.setAlpha(0.0f);
+            }
+        }
+    }
+
+    public class ViewComparator implements Comparator<View> {
+
+        @Override
+        public int compare(View view, View view2) {
+            final int middle = mViewPager.getWidth() / 2 + mViewPager.getScrollX();
+            final float viewX = view.getX();
+            final float view2X = view2.getX();
+            final int viewDistance = Math.abs(middle - (int) (viewX + 0.5f * view.getWidth()));
+            final int view2Distance = Math.abs(middle - (int) (view2X + 0.5f * view2.getWidth()));
+            return view2Distance - viewDistance;
         }
     }
 
