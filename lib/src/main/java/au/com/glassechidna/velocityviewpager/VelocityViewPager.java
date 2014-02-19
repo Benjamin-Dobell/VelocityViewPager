@@ -148,7 +148,6 @@ public class VelocityViewPager extends ViewGroup {
 
     private boolean mScrollingCacheEnabled;
 
-    private boolean mPopulatePending;
     private int mOffscreenPageLimit = DEFAULT_OFFSCREEN_PAGES;
 
     private boolean mIsBeingDragged;
@@ -438,7 +437,6 @@ public class VelocityViewPager extends ViewGroup {
                 mObserver = new PagerObserver();
             }
             mAdapter.registerDataSetObserver(mObserver);
-            mPopulatePending = false;
             final boolean wasFirstLayout = mFirstLayout;
             mFirstLayout = true;
             mExpectedAdapterCount = mAdapter.getCount();
@@ -496,7 +494,6 @@ public class VelocityViewPager extends ViewGroup {
      * @param item Item index to select
      */
     public void setCurrentItem(int item) {
-        mPopulatePending = false;
         setCurrentItemInternal(item, !mFirstLayout, false);
     }
 
@@ -507,12 +504,15 @@ public class VelocityViewPager extends ViewGroup {
      * @param smoothScroll True to smoothly scroll to the new item, false to transition immediately
      */
     public void setCurrentItem(int item, boolean smoothScroll) {
-        mPopulatePending = false;
         setCurrentItemInternal(item, smoothScroll, false);
     }
 
     public int getCurrentItem() {
         return mCurItem;
+    }
+
+    public void setDrawOrderComparator(Comparator<View> drawOrderComparator) {
+        this.mDrawOrderComparator = drawOrderComparator;
     }
 
     void setCurrentItemInternal(int item, boolean smoothScroll, boolean always) {
@@ -936,16 +936,6 @@ public class VelocityViewPager extends ViewGroup {
         }
 
         if (mAdapter == null) {
-            sortChildDrawingOrder();
-            return;
-        }
-
-        // Bail now if we are waiting to populate.  This is to hold off
-        // on creating views from the time the user releases their finger to
-        // fling to a new position until we have finished the scroll to
-        // that position, avoiding glitches from happening at that point.
-        if (mPopulatePending) {
-            if (DEBUG) Log.i(TAG, "populate is pending, skipping for now...");
             sortChildDrawingOrder();
             return;
         }
@@ -1858,7 +1848,6 @@ public class VelocityViewPager extends ViewGroup {
                 scrollTo(x, y);
             }
         }
-        mPopulatePending = false;
         for (int i=0; i<mItems.size(); i++) {
             ItemInfo ii = mItems.get(i);
             if (ii.scrolling) {
@@ -1999,7 +1988,6 @@ public class VelocityViewPager extends ViewGroup {
                         Math.abs(mScroller.getFinalX() - mScroller.getCurrX()) > mCloseEnough) {
                     // Let the user 'catch' the pager as it animates.
                     mScroller.abortAnimation();
-                    mPopulatePending = false;
                     populate();
                     mIsBeingDragged = true;
                     requestParentDisallowInterceptTouchEvent(true);
@@ -2063,7 +2051,6 @@ public class VelocityViewPager extends ViewGroup {
         switch (action & MotionEventCompat.ACTION_MASK) {
             case MotionEvent.ACTION_DOWN: {
                 mScroller.abortAnimation();
-                mPopulatePending = false;
                 populate();
 
                 // Remember where the motion event started
@@ -2126,7 +2113,6 @@ public class VelocityViewPager extends ViewGroup {
                         fling(initialVelocity);
                         ViewCompat.postInvalidateOnAnimation(this);
                     } else {
-                        mPopulatePending = true;
                         int nextPage = determineTargetPage(currentPage, pageOffset, initialVelocity,
                                 totalDelta);
                         setCurrentItemInternal(nextPage, true, true, initialVelocity);
@@ -2214,6 +2200,9 @@ public class VelocityViewPager extends ViewGroup {
         mLastMotionX += scrollX - (int) scrollX;
         scrollTo((int) scrollX, getScrollY());
         pageScrolled((int) scrollX);
+
+        final ItemInfo ii = infoForScrollPosition((int) scrollX);
+        populate(ii.position);
 
         return needsInvalidate;
     }
@@ -2441,7 +2430,6 @@ public class VelocityViewPager extends ViewGroup {
         velocityTracker.computeCurrentVelocity(1000, mMaximumVelocity);
         int initialVelocity = (int) VelocityTrackerCompat.getXVelocity(
                 velocityTracker, mActivePointerId);
-        mPopulatePending = true;
         final int width = getClientWidth();
         final int scrollX = getScrollX();
         final ItemInfo ii = infoForCurrentScrollPosition();
