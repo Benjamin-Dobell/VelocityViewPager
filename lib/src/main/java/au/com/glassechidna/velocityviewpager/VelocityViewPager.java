@@ -1674,8 +1674,8 @@ public class VelocityViewPager extends ViewGroup {
                         }
                     }
                 } else if (mFlinging == FLINGING_LEFT) {
-                    // Overscroll
                     if (finalX < snapItemOffset) {
+                        // Overscroll
                         if (x < snapItemOffset) {
                             mFlinging = FLINGING_STOPPED;
                             int overscroll = snapItemOffset - finalX;
