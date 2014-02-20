@@ -68,7 +68,7 @@ import java.util.Comparator;
  * gestures and customised rendering logic to allow support for
  * carousel-like behaviour.
  */
-public class VelocityViewPager extends ViewGroup {
+public class VelocityViewPager extends ViewGroup implements View.OnClickListener {
     private static final String TAG = "VelocityViewPager";
     private static final boolean DEBUG = false;
 
@@ -141,6 +141,7 @@ public class VelocityViewPager extends ViewGroup {
     // or end of the pager data set during touch scrolling.
     private float mFirstOffset = -Float.MAX_VALUE;
     private float mLastOffset = Float.MAX_VALUE;
+    private boolean mOffsetToLastPageAllowed = false;
 
     private int mChildWidthMeasureSpec;
     private int mChildHeightMeasureSpec;
@@ -214,6 +215,8 @@ public class VelocityViewPager extends ViewGroup {
     private int mDrawingOrder;
     private ArrayList<View> mDrawingOrderedChildren;
     private Comparator<View> mDrawOrderComparator = new ViewPositionComparator();
+
+    private OnItemClickListener mOnItemClickListener;
 
     /**
      * Indicates that the pager is in an idle, settled state. The current page
@@ -406,8 +409,8 @@ public class VelocityViewPager extends ViewGroup {
         if (mOnPageChangeListener != null) {
             mOnPageChangeListener.onPageScrollStateChanged(newState);
         }
-    }
 
+}
     /**
      * Set a PagerAdapter that will supply views for this pager as needed.
      *
@@ -509,10 +512,6 @@ public class VelocityViewPager extends ViewGroup {
 
     public int getCurrentItem() {
         return mCurItem;
-    }
-
-    public void setDrawOrderComparator(Comparator<View> drawOrderComparator) {
-        this.mDrawOrderComparator = drawOrderComparator;
     }
 
     void setCurrentItemInternal(int item, boolean smoothScroll, boolean always) {
@@ -627,6 +626,14 @@ public class VelocityViewPager extends ViewGroup {
             }
             if (needsPopulate) populate();
         }
+    }
+
+    public void setDrawOrderComparator(Comparator<View> drawOrderComparator) {
+        this.mDrawOrderComparator = drawOrderComparator;
+    }
+
+    public void setOffsetToLastPageAllowed(final boolean offsetToLastPageAllowed) {
+        this.mOffsetToLastPageAllowed = offsetToLastPageAllowed;
     }
 
     void setChildrenDrawingOrderEnabledCompat(boolean enable) {
@@ -902,6 +909,15 @@ public class VelocityViewPager extends ViewGroup {
 
         if (isUpdating) {
             mAdapter.finishUpdate(this);
+
+            final int childCount = getChildCount();
+            for (int i = 0; i < childCount; i++) {
+                final View child = getChildAt(i);
+                final LayoutParams lp = (LayoutParams) child.getLayoutParams();
+                if (!lp.isDecor) {
+                    child.setOnClickListener(this);
+                }
+            }
         }
 
         Collections.sort(mItems, COMPARATOR);
@@ -1076,15 +1092,19 @@ public class VelocityViewPager extends ViewGroup {
             final View child = getChildAt(i);
             final LayoutParams lp = (LayoutParams) child.getLayoutParams();
             lp.childIndex = i;
-            if (!lp.isDecor && lp.widthFactor == 0.f) {
-                // 0 means requery the adapter for this, it doesn't have a valid width.
-                final ItemInfo ii = infoForChild(child);
-                if (ii != null) {
-                    lp.widthFactor = ii.widthFactor;
-                    lp.position = ii.position;
+            if (!lp.isDecor) {
+                child.setOnClickListener(this);
+                if (lp.widthFactor == 0.f) {
+                    // 0 means requery the adapter for this, it doesn't have a valid width.
+                    final ItemInfo ii = infoForChild(child);
+                    if (ii != null) {
+                        lp.widthFactor = ii.widthFactor;
+                        lp.position = ii.position;
+                    }
                 }
             }
         }
+
         sortChildDrawingOrder();
 
         if (hasFocus()) {
@@ -1176,8 +1196,13 @@ public class VelocityViewPager extends ViewGroup {
         float offset = curItem.offset;
         int pos = curItem.position - 1;
         mFirstOffset = curItem.position == 0 ? curItem.offset : -Float.MAX_VALUE;
-        mLastOffset = curItem.position == N - 1 ?
+
+        if (mOffsetToLastPageAllowed) {
+            mLastOffset = curItem.position == N - 1 ? curItem.offset : Float.MAX_VALUE;
+        } else {
+            mLastOffset = curItem.position == N - 1 ?
                 curItem.offset + curItem.widthFactor - 1 : Float.MAX_VALUE;
+        }
         // Previous pages
         for (int i = curIndex - 1; i >= 0; i--, pos--) {
             final ItemInfo ii = mItems.get(i);
@@ -1197,7 +1222,8 @@ public class VelocityViewPager extends ViewGroup {
                 offset += mAdapter.getPageWidth(pos++) + marginOffset;
             }
             if (ii.position == N - 1) {
-                mLastOffset = offset + ii.widthFactor - 1;
+                mLastOffset = (mOffsetToLastPageAllowed) ? offset :
+                    offset + curItem.widthFactor - 1;
             }
             ii.offset = offset;
             offset += ii.widthFactor + marginOffset;
@@ -1605,6 +1631,9 @@ public class VelocityViewPager extends ViewGroup {
         if (mFirstLayout) {
             scrollToItem(mCurItem, false, 0, false);
         }
+
+        sortChildDrawingOrder();
+
         mFirstLayout = false;
     }
 
@@ -1614,7 +1643,7 @@ public class VelocityViewPager extends ViewGroup {
         int firstOffset = (int) (mFirstOffset * width);
         if (x < firstOffset) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.ICE_CREAM_SANDWICH) {
-                if (mLeftEdge.isFinished()) {
+                if (getOverScrollMode() != OVER_SCROLL_NEVER && mLeftEdge.isFinished()) {
                     mLeftEdge.onAbsorb((int) Math.abs(mScroller.getCurrVelocity()));
                 }
             }
@@ -1628,7 +1657,7 @@ public class VelocityViewPager extends ViewGroup {
         int lastOffset = (int) (mLastOffset * width);
         if (x > lastOffset) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.ICE_CREAM_SANDWICH) {
-                if (mRightEdge.isFinished()) {
+                if (getOverScrollMode() != OVER_SCROLL_NEVER && mRightEdge.isFinished()) {
                     mRightEdge.onAbsorb((int) Math.abs(mScroller.getCurrVelocity()));
                 }
             }
@@ -1757,6 +1786,22 @@ public class VelocityViewPager extends ViewGroup {
         return true;
     }
 
+    private void transformPages() {
+        if (mPageTransformer != null) {
+            final int scrollX = getScrollX();
+            final int childCount = getChildCount();
+            for (int i = 0; i < childCount; i++) {
+                final View child = getChildAt(i);
+                final LayoutParams lp = (LayoutParams) child.getLayoutParams();
+
+                if (lp.isDecor) continue;
+
+                final float transformPos = (float) (child.getLeft() - scrollX) / getClientWidth();
+                mPageTransformer.transformPage(child, transformPos);
+            }
+        }
+    }
+
     /**
      * This method will be invoked when the current page is scrolled, either as part
      * of a programmatically initiated smooth scroll or a user initiated touch scroll.
@@ -1817,19 +1862,7 @@ public class VelocityViewPager extends ViewGroup {
             mInternalPageChangeListener.onPageScrolled(position, offset, offsetPixels);
         }
 
-        if (mPageTransformer != null) {
-            final int scrollX = getScrollX();
-            final int childCount = getChildCount();
-            for (int i = 0; i < childCount; i++) {
-                final View child = getChildAt(i);
-                final LayoutParams lp = (LayoutParams) child.getLayoutParams();
-
-                if (lp.isDecor) continue;
-
-                final float transformPos = (float) (child.getLeft() - scrollX) / getClientWidth();
-                mPageTransformer.transformPage(child, transformPos);
-            }
-        }
+        transformPages();
 
         mCalledSuper = true;
     }
@@ -2184,18 +2217,19 @@ public class VelocityViewPager extends ViewGroup {
         }
 
         if (scrollX < leftBound) {
-            if (leftAbsolute) {
+            if (getOverScrollMode() != OVER_SCROLL_NEVER && leftAbsolute) {
                 float over = leftBound - scrollX;
                 needsInvalidate = mLeftEdge.onPull(Math.abs(over) / width);
             }
             scrollX = leftBound;
         } else if (scrollX > rightBound) {
-            if (rightAbsolute) {
+            if (getOverScrollMode() != OVER_SCROLL_NEVER && rightAbsolute) {
                 float over = scrollX - rightBound;
                 needsInvalidate = mRightEdge.onPull(Math.abs(over) / width);
             }
             scrollX = rightBound;
         }
+
         // Don't lose the rounded component
         mLastMotionX += scrollX - (int) scrollX;
         scrollTo((int) scrollX, getScrollY());
@@ -2882,6 +2916,19 @@ public class VelocityViewPager extends ViewGroup {
         return new LayoutParams(getContext(), attrs);
     }
 
+    @Override
+    public void onClick(View v) {
+        final ItemInfo ii = infoForChild(v);
+
+        if (ii != null && mOnItemClickListener != null) {
+            mOnItemClickListener.onItemClick(ii.object, v, ii.position);
+        }
+    }
+
+    public void setOnItemClickListener(OnItemClickListener onItemClickListener) {
+        mOnItemClickListener = onItemClickListener;
+    }
+
     class MyAccessibilityDelegate extends AccessibilityDelegateCompat {
 
         @Override
@@ -2999,5 +3046,9 @@ public class VelocityViewPager extends ViewGroup {
             gravity = a.getInteger(0, Gravity.TOP);
             a.recycle();
         }
+    }
+
+    public interface OnItemClickListener {
+        void onItemClick(Object object, View view, int position);
     }
 }
