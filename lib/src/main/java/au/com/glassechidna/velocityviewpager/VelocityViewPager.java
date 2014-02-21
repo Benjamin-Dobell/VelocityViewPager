@@ -128,7 +128,7 @@ public class VelocityViewPager extends ViewGroup implements View.OnClickListener
     private int mRestoredCurItem = -1;
     private Parcelable mRestoredAdapterState = null;
     private ClassLoader mRestoredClassLoader = null;
-    private OverScroller mScroller;
+    private VelocityScroller mScroller;
     private PagerObserver mObserver;
 
     private int mPageMargin;
@@ -367,7 +367,7 @@ public class VelocityViewPager extends ViewGroup implements View.OnClickListener
         setDescendantFocusability(FOCUS_AFTER_DESCENDANTS);
         setFocusable(true);
         final Context context = getContext();
-        mScroller = new OverScroller(context, sInterpolator);
+        mScroller = new VelocityScroller(context, sInterpolator);
         final ViewConfiguration configuration = ViewConfiguration.get(context);
         final float density = context.getResources().getDisplayMetrics().density;
 
@@ -1642,10 +1642,8 @@ public class VelocityViewPager extends ViewGroup implements View.OnClickListener
 
         int firstOffset = (int) (mFirstOffset * width);
         if (x < firstOffset) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.ICE_CREAM_SANDWICH) {
-                if (getOverScrollMode() != OVER_SCROLL_NEVER && mLeftEdge.isFinished()) {
-                    mLeftEdge.onAbsorb((int) Math.abs(mScroller.getCurrVelocity()));
-                }
+            if (ViewCompat.getOverScrollMode(this) != OVER_SCROLL_NEVER && mLeftEdge.isFinished()) {
+                mLeftEdge.onAbsorb((int) Math.abs(mScroller.getCurrVelocity()));
             }
 
             mFlinging = FLINGING_STOPPED;
@@ -1656,10 +1654,8 @@ public class VelocityViewPager extends ViewGroup implements View.OnClickListener
 
         int lastOffset = (int) (mLastOffset * width);
         if (x > lastOffset) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.ICE_CREAM_SANDWICH) {
-                if (getOverScrollMode() != OVER_SCROLL_NEVER && mRightEdge.isFinished()) {
-                    mRightEdge.onAbsorb((int) Math.abs(mScroller.getCurrVelocity()));
-                }
+            if (ViewCompat.getOverScrollMode(this) != OVER_SCROLL_NEVER && mRightEdge.isFinished()) {
+                mRightEdge.onAbsorb((int) Math.abs(mScroller.getCurrVelocity()));
             }
 
             mFlinging = FLINGING_STOPPED;
@@ -1696,10 +1692,7 @@ public class VelocityViewPager extends ViewGroup implements View.OnClickListener
                         // Underscroll
                         if (x > snapItemOffset - snapItemWidth) {
                             mFlinging = FLINGING_STOPPED;
-                            int overscroll = snapItemOffset - x;
-                            mScroller.notifyHorizontalEdgeReached(x, snapItemOffset, overscroll);
-                            /*mScroller.forceFinished(true);
-                            mScroller.fling(x, 0, (int) mScroller.getCurrVelocity(), 0, snapItemOffset, snapItemOffset, 0, 0);*/
+                            mScroller.notifyFinalXExtended(snapItemOffset);
                         }
                     }
                 } else if (mFlinging == FLINGING_LEFT) {
@@ -1707,8 +1700,7 @@ public class VelocityViewPager extends ViewGroup implements View.OnClickListener
                         // Overscroll
                         if (x < snapItemOffset) {
                             mFlinging = FLINGING_STOPPED;
-                            int overscroll = snapItemOffset - finalX;
-                            mScroller.notifyHorizontalEdgeReached(x, snapItemOffset, overscroll);
+                            mScroller.notifyFinalXExtended(snapItemOffset);
                         }
                     } else {
                         // Underscroll
@@ -1716,8 +1708,6 @@ public class VelocityViewPager extends ViewGroup implements View.OnClickListener
                             mFlinging = FLINGING_STOPPED;
                             int overscroll = x - snapItemOffset;
                             mScroller.notifyHorizontalEdgeReached(x, snapItemOffset, overscroll);
-                            /*mScroller.forceFinished(true);
-                            mScroller.fling(x, 0, (int) -mScroller.getCurrVelocity(), 0, snapItemOffset, snapItemOffset, 0, 0);*/
                         }
                     }
 
@@ -2217,13 +2207,13 @@ public class VelocityViewPager extends ViewGroup implements View.OnClickListener
         }
 
         if (scrollX < leftBound) {
-            if (getOverScrollMode() != OVER_SCROLL_NEVER && leftAbsolute) {
+            if (ViewCompat.getOverScrollMode(this) != OVER_SCROLL_NEVER && leftAbsolute) {
                 float over = leftBound - scrollX;
                 needsInvalidate = mLeftEdge.onPull(Math.abs(over) / width);
             }
             scrollX = leftBound;
         } else if (scrollX > rightBound) {
-            if (getOverScrollMode() != OVER_SCROLL_NEVER && rightAbsolute) {
+            if (ViewCompat.getOverScrollMode(this) != OVER_SCROLL_NEVER && rightAbsolute) {
                 float over = scrollX - rightBound;
                 needsInvalidate = mRightEdge.onPull(Math.abs(over) / width);
             }
