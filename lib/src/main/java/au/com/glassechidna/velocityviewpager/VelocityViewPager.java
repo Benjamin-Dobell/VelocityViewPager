@@ -1700,14 +1700,14 @@ public class VelocityViewPager extends ViewGroup implements View.OnClickListener
                         // Overscroll
                         if (x < snapItemOffset) {
                             mFlinging = FLINGING_STOPPED;
-                            mScroller.notifyFinalXExtended(snapItemOffset);
+                            int overscroll = snapItemOffset - finalX;
+                            mScroller.notifyHorizontalEdgeReached(x, snapItemOffset, overscroll);
                         }
                     } else {
                         // Underscroll
                         if (x < snapItemOffset + snapItemWidth) {
                             mFlinging = FLINGING_STOPPED;
-                            int overscroll = x - snapItemOffset;
-                            mScroller.notifyHorizontalEdgeReached(x, snapItemOffset, overscroll);
+                            mScroller.notifyFinalXExtended(snapItemOffset);
                         }
                     }
 
