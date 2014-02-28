@@ -914,7 +914,7 @@ public class VelocityViewPager extends ViewGroup implements View.OnClickListener
             for (int i = 0; i < childCount; i++) {
                 final View child = getChildAt(i);
                 final LayoutParams lp = (LayoutParams) child.getLayoutParams();
-                if (!lp.isDecor) {
+                if (!lp.isDecor && !child.hasOnClickListeners()) {
                     child.setOnClickListener(this);
                 }
             }
@@ -1093,7 +1093,9 @@ public class VelocityViewPager extends ViewGroup implements View.OnClickListener
             final LayoutParams lp = (LayoutParams) child.getLayoutParams();
             lp.childIndex = i;
             if (!lp.isDecor) {
-                child.setOnClickListener(this);
+                if (!child.hasOnClickListeners()) {
+                    child.setOnClickListener(this);
+                }
                 if (lp.widthFactor == 0.f) {
                     // 0 means requery the adapter for this, it doesn't have a valid width.
                     final ItemInfo ii = infoForChild(child);
