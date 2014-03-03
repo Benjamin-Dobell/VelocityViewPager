@@ -2310,12 +2310,13 @@ public class VelocityViewPager extends ViewGroup implements View.OnClickListener
     }
 
     private void fling(int velocity) {
-        final int width = getClientWidth();
         final int sx = getScrollX();
         final int sy = getScrollY();
 
         mScroller.fling(sx, sy, -velocity, 0, Integer.MIN_VALUE, Integer.MAX_VALUE, sy, sy);
         mFlinging = (velocity > 0) ? FLINGING_LEFT : FLINGING_RIGHT;
+
+        setScrollState(SCROLL_STATE_SETTLING);
     }
 
     @Override
