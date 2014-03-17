@@ -2227,7 +2227,7 @@ public class VelocityViewPager extends ViewGroup implements View.OnClickListener
         scrollTo((int) scrollX, getScrollY());
         pageScrolled((int) scrollX);
 
-        final ItemInfo ii = infoForScrollPosition((int) scrollX);
+        final ItemInfo ii = infoForCurrentScrollPosition();
         populate(ii.position);
 
         return needsInvalidate;
