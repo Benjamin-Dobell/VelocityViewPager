@@ -51,7 +51,6 @@ import android.view.ViewParent;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.animation.AnimationUtils;
 import android.view.animation.Interpolator;
-import android.widget.OverScroller;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -68,7 +67,7 @@ import java.util.Comparator;
  * gestures and customised rendering logic to allow support for
  * carousel-like behaviour.
  */
-public class VelocityViewPager extends ViewGroup implements View.OnClickListener {
+public class VelocityViewPager extends ViewGroup implements View.OnClickListener, View.OnLongClickListener {
     private static final String TAG = "VelocityViewPager";
     private static final boolean DEBUG = false;
 
@@ -217,6 +216,7 @@ public class VelocityViewPager extends ViewGroup implements View.OnClickListener
     private Comparator<View> mDrawOrderComparator = new ViewPositionComparator();
 
     private OnItemClickListener mOnItemClickListener;
+    private OnItemLongClickListener mOnItemLongClickListener;
 
     /**
      * Indicates that the pager is in an idle, settled state. The current page
@@ -910,14 +910,8 @@ public class VelocityViewPager extends ViewGroup implements View.OnClickListener
         if (isUpdating) {
             mAdapter.finishUpdate(this);
 
-            final int childCount = getChildCount();
-            for (int i = 0; i < childCount; i++) {
-                final View child = getChildAt(i);
-                final LayoutParams lp = (LayoutParams) child.getLayoutParams();
-                if (!lp.isDecor && !child.hasOnClickListeners()) {
-                    child.setOnClickListener(this);
-                }
-            }
+            updateViewOnClickListeners();
+            updateViewOnLongClickListeners();
         }
 
         Collections.sort(mItems, COMPARATOR);
@@ -1093,9 +1087,6 @@ public class VelocityViewPager extends ViewGroup implements View.OnClickListener
             final LayoutParams lp = (LayoutParams) child.getLayoutParams();
             lp.childIndex = i;
             if (!lp.isDecor) {
-                if (!child.hasOnClickListeners()) {
-                    child.setOnClickListener(this);
-                }
                 if (lp.widthFactor == 0.f) {
                     // 0 means requery the adapter for this, it doesn't have a valid width.
                     final ItemInfo ii = infoForChild(child);
@@ -1106,6 +1097,9 @@ public class VelocityViewPager extends ViewGroup implements View.OnClickListener
                 }
             }
         }
+
+        updateViewOnClickListeners();
+        updateViewOnLongClickListeners();
 
         sortChildDrawingOrder();
 
@@ -2146,6 +2140,8 @@ public class VelocityViewPager extends ViewGroup implements View.OnClickListener
 
                     mActivePointerId = INVALID_POINTER;
                     endDrag();
+                } else {
+
                 }
                 break;
             case MotionEvent.ACTION_CANCEL:
@@ -2918,8 +2914,56 @@ public class VelocityViewPager extends ViewGroup implements View.OnClickListener
         }
     }
 
+    @Override
+    public boolean onLongClick(View v) {
+        final ItemInfo ii = infoForChild(v);
+
+        if (ii != null && mOnItemLongClickListener != null) {
+            mOnItemLongClickListener.onItemLongClick(ii.object, v, ii.position);
+            return true;
+        }
+
+        return false;
+    }
+
+    private void updateViewOnClickListeners() {
+        final int childCount = getChildCount();
+        for (int i = 0; i < childCount; i++) {
+            final View child = getChildAt(i);
+            final LayoutParams layoutParams = (LayoutParams) child.getLayoutParams();
+            if (!layoutParams.isDecor) {
+                if (mOnItemClickListener != null) {
+                    child.setOnClickListener(this);
+                }
+            }
+        }
+    }
+
+    private void updateViewOnLongClickListeners() {
+        final int childCount = getChildCount();
+        for (int i = 0; i < childCount; i++) {
+            final View child = getChildAt(i);
+            final LayoutParams layoutParams = (LayoutParams) child.getLayoutParams();
+            if (!layoutParams.isDecor) {
+                if (mOnItemLongClickListener != null) {
+                    child.setOnLongClickListener(this);
+                }
+            }
+        }
+    }
+
     public void setOnItemClickListener(OnItemClickListener onItemClickListener) {
-        mOnItemClickListener = onItemClickListener;
+        if (mOnItemClickListener != onItemClickListener) {
+            mOnItemClickListener = onItemClickListener;
+            updateViewOnClickListeners();
+        }
+    }
+
+    public void setOnItemLongClickListener(OnItemLongClickListener onItemLongClickListener) {
+        if (mOnItemLongClickListener != onItemLongClickListener) {
+            mOnItemLongClickListener = onItemLongClickListener;
+            updateViewOnLongClickListeners();
+        }
     }
 
     class MyAccessibilityDelegate extends AccessibilityDelegateCompat {
@@ -3043,5 +3087,9 @@ public class VelocityViewPager extends ViewGroup implements View.OnClickListener
 
     public interface OnItemClickListener {
         void onItemClick(Object object, View view, int position);
+    }
+
+    public interface OnItemLongClickListener {
+        void onItemLongClick(Object object, View view, int position);
     }
 }

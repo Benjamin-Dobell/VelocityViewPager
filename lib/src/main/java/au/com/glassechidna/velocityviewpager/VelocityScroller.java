@@ -24,7 +24,6 @@ import android.util.Log;
 import android.view.ViewConfiguration;
 import android.view.animation.AnimationUtils;
 import android.view.animation.Interpolator;
-import android.widget.Scroller;
 
 /**
  * Based on Google's OverScroller, this class encapsulates scrolling with the
