@@ -2919,8 +2919,7 @@ public class VelocityViewPager extends ViewGroup implements View.OnClickListener
         final ItemInfo ii = infoForChild(v);
 
         if (ii != null && mOnItemLongClickListener != null) {
-            mOnItemLongClickListener.onItemLongClick(ii.object, v, ii.position);
-            return true;
+            return mOnItemLongClickListener.onItemLongClick(ii.object, v, ii.position);
         }
 
         return false;
@@ -3090,6 +3089,6 @@ public class VelocityViewPager extends ViewGroup implements View.OnClickListener
     }
 
     public interface OnItemLongClickListener {
-        void onItemLongClick(Object object, View view, int position);
+        boolean onItemLongClick(Object object, View view, int position);
     }
 }
